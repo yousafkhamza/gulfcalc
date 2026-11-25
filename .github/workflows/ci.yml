@@ -1,0 +1,68 @@
+name: CI and deploy
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    # Site settings come from repository variables (Settings > Secrets and variables > Actions > Variables).
+    # All are optional; see docs/ADSENSE.md.
+    env:
+      SITE_URL: ${{ vars.SITE_URL }}
+      ADS_ENABLED: ${{ vars.ADS_ENABLED }}
+      ADSENSE_CLIENT: ${{ vars.ADSENSE_CLIENT }}
+      ADSENSE_SLOT_IN_CONTENT: ${{ vars.ADSENSE_SLOT_IN_CONTENT }}
+      ADSENSE_SLOT_SIDEBAR: ${{ vars.ADSENSE_SLOT_SIDEBAR }}
+      ADSENSE_SLOT_HOME: ${{ vars.ADSENSE_SLOT_HOME }}
+      GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Unit tests
+        run: npm test
+
+      - name: Build site
+        run: npm run build
+
+      - name: Check pages and links
+        run: npm run check
+
+      - name: Upload site
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: dist
+
+  deploy:
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
