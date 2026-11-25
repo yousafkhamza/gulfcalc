@@ -183,9 +183,19 @@ for (const file of pages) {
       for (const id of ['calc-form', 'result', 'actions', 'copy-link', 'print', 'reset']) {
         if (!idSet.has(id)) fail(`${name}: calculator page is missing #${id}`);
       }
-      const names = [...html.matchAll(/<(?:input|select) id="f-[^"]+" name="([^"]+)"/g)].map((m) => m[1]);
-      const expected = spec.fields.map((f) => f.id);
+      // Optional groups render after the main fields, so compare as sets.
+      const names = [...html.matchAll(/<(?:input|select) id="f-[^"]+" name="([^"]+)"/g)].map((m) => m[1]).sort();
+      const expected = spec.fields.map((f) => f.id).sort();
       if (names.join(',') !== expected.join(',')) fail(`${name}: form fields [${names}] do not match [${expected}]`);
+      for (const m of html.matchAll(/data-for="([^"]+)"/g)) {
+        if (!idSet.has(m[1])) fail(`${name}: quick-pick button points to missing #${m[1]}`);
+      }
+      for (const m of html.matchAll(/data-show-field="([^"]+)"/g)) {
+        if (!expected.includes(m[1])) fail(`${name}: field visibility depends on unknown field "${m[1]}"`);
+      }
+      const groupCount = (html.match(/<details class="more"/g) || []).length;
+      const expectedGroups = new Set(spec.fields.filter((f) => f.group).map((f) => f.group)).size;
+      if (groupCount !== expectedGroups) fail(`${name}: ${groupCount} optional sections, expected ${expectedGroups}`);
       if (!html.includes('class="result-big"')) fail(`${name}: no example result rendered`);
     }
   }

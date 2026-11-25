@@ -125,7 +125,7 @@ function adSlot(ctx, name) {
   return `<div class="ad" data-ad="${esc(name)}"><ins class="adsbygoogle" style="display:block" data-ad-client="${esc(cfg.ADSENSE_CLIENT)}" data-ad-slot="${esc(slot)}" data-ad-format="auto" data-full-width-responsive="true"></ins></div>`;
 }
 
-function fieldHTML(field, lang) {
+function fieldHTML(field, lang, spec) {
   const id = `f-${field.id}`;
   const hint = field.hint ? `<span class="hint" id="${id}-hint">${esc(tr(field.hint, lang))}</span>` : '';
   const described = field.hint ? ` aria-describedby="${id}-hint"` : '';
@@ -147,7 +147,38 @@ function fieldHTML(field, lang) {
       .join(' ');
     control = `<input id="${id}" name="${esc(field.id)}" type="number" inputmode="decimal" ${attrs} value="${esc(field.default)}"${described}>`;
   }
-  return `<div class="field"><label for="${id}">${esc(tr(field.label, lang))}</label>${control}${hint}</div>`;
+  // Quick picks for common values, e.g. leave days 30 / 26 / 24 / 22.
+  const chips = field.chips
+    ? `<div class="picks" role="group" aria-label="${esc(UI[lang].calc.picks)}">${field.chips
+        .map(
+          (value) =>
+            `<button type="button" class="pick" data-for="${id}" data-value="${esc(value)}" aria-pressed="${String(value) === String(field.default)}">${esc(value)}</button>`,
+        )
+        .join('')}</div>`
+    : '';
+  // Fields that only apply to some choices, e.g. housing allowance only while on leave.
+  let show = '';
+  if (field.showIf) {
+    const controller = spec.fields.find((f) => f.id === field.showIf.field);
+    const visible = field.showIf.in.includes(String(controller?.default));
+    show = ` data-show-field="${esc(field.showIf.field)}" data-show-values="${esc(field.showIf.in.join(' '))}"${visible ? '' : ' hidden'}`;
+  }
+  return `<div class="field${field.chips ? ' has-picks' : ''}"${show}><label for="${id}">${esc(tr(field.label, lang))}</label>${control}${chips}${hint}</div>`;
+}
+
+/** The form: main fields first, then each optional group in a collapsible section. */
+function formHTML(spec, lang) {
+  const main = spec.fields.filter((f) => !f.group);
+  const groupIds = [...new Set(spec.fields.filter((f) => f.group).map((f) => f.group))];
+  const groups = groupIds
+    .map((g) => {
+      const fields = spec.fields.filter((f) => f.group === g);
+      return `<details class="more" data-group="${esc(g)}"><summary>${esc(tr(spec.groups?.[g] ?? g, lang))}</summary><div class="form">${fields
+        .map((f) => fieldHTML(f, lang, spec))
+        .join('\n')}</div></details>`;
+    })
+    .join('\n');
+  return `<div class="form">${main.map((f) => fieldHTML(f, lang, spec)).join('\n')}</div>${groups}`;
 }
 
 function checkedChip(ctx, lang) {
@@ -160,7 +191,7 @@ export function calcPage(ctx, page, lang) {
   const spec = CALCS[page.calc];
   if (!spec) throw new Error(`No calculator "${page.calc}" for page ${page.slug}`);
   const title = tr(page.title, lang);
-  const fields = spec.fields.map((f) => fieldHTML(f, lang)).join('\n');
+  const form = formHTML(spec, lang);
   const result = renderResult(spec, coerce(spec, defaults(spec)), lang);
   const related = page.related
     .map((id) => pageByCalc(id))
@@ -212,13 +243,14 @@ export function calcPage(ctx, page, lang) {
   ${checkedChip(ctx, lang)}
 </header>
 <div class="calc">
-  <section class="calc-main" aria-labelledby="inputs-h">
-    <div class="panel">
-      <h2 id="inputs-h" class="panel-title">${esc(ui.calc.inputs)}</h2>
-      <form id="calc-form" class="form" novalidate>
-${fields}
-      </form>
-    </div>
+  <section class="panel calc-form" aria-labelledby="inputs-h">
+    <h2 id="inputs-h" class="panel-title">${esc(ui.calc.inputs)}</h2>
+    <form id="calc-form" novalidate>
+${form}
+    </form>
+  </section>
+  <section class="calc-result" aria-labelledby="result-h">
+    <h2 id="result-h" class="sr-only">${esc(ui.calc.result)}</h2>
     <div id="result" class="result-slot" aria-live="polite">${result}</div>
     <noscript><p class="hint">${esc(ui.calc.noscript)}</p></noscript>
     <div class="actions" id="actions" hidden>
@@ -228,18 +260,18 @@ ${fields}
     </div>
     ${adSlot(ctx, 'inContent')}
   </section>
-  <aside class="calc-side">
-    <div class="box">
-      <h2>${esc(ui.calc.how)}</h2>
-      <ul>${page.how.map((h) => `<li>${esc(tr(h, lang))}</li>`).join('')}</ul>
-    </div>
-    <div class="box">
-      <h2>${esc(ui.calc.related)}</h2>
-      <ul class="links">${related}</ul>
-    </div>
-    ${adSlot(ctx, 'sidebar')}
-  </aside>
 </div>
+<aside class="calc-info">
+  <div class="box">
+    <h2>${esc(ui.calc.how)}</h2>
+    <ul>${page.how.map((h) => `<li>${esc(tr(h, lang))}</li>`).join('')}</ul>
+  </div>
+  <div class="box">
+    <h2>${esc(ui.calc.related)}</h2>
+    <ul class="links">${related}</ul>
+  </div>
+  ${adSlot(ctx, 'sidebar')}
+</aside>
 <article class="guide">
   <h2>${esc(ui.calc.guide)}</h2>
   ${guide}

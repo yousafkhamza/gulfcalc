@@ -35,10 +35,56 @@ const result = document.getElementById('result');
 
 if (spec && form && result) {
   const params = new URLSearchParams(window.location.search);
+  const today = () => {
+    const d = new Date();
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  };
+
+  // Fields marked `today` (last working day, notice date) start at today's date.
+  const fillToday = () => {
+    for (const field of spec.fields) {
+      const el = form.elements.namedItem(field.id);
+      if (el && field.today) el.value = today();
+    }
+  };
+
+  fillToday();
   for (const field of spec.fields) {
     const el = form.elements.namedItem(field.id);
     if (el && params.has(field.id)) el.value = params.get(field.id);
   }
+
+  // Open an optional section when a shared link changed one of its fields.
+  for (const details of form.querySelectorAll('details.more')) {
+    const changed = spec.fields.some(
+      (f) => f.group === details.dataset.group && params.has(f.id) && params.get(f.id) !== String(f.default),
+    );
+    if (changed) details.open = true;
+  }
+
+  // Show or hide fields that only apply to some choices.
+  const syncVisibility = () => {
+    for (const wrap of form.querySelectorAll('[data-show-field]')) {
+      const control = form.elements.namedItem(wrap.dataset.showField);
+      wrap.hidden = !(control && wrap.dataset.showValues.split(' ').includes(control.value));
+    }
+  };
+
+  // Quick picks: set the value and mark the matching button.
+  const syncPicks = () => {
+    for (const pick of form.querySelectorAll('.pick')) {
+      const input = document.getElementById(pick.dataset.for);
+      pick.setAttribute('aria-pressed', String(!!input && Number(input.value) === Number(pick.dataset.value)));
+    }
+  };
+  form.addEventListener('click', (event) => {
+    const pick = event.target.closest('.pick');
+    if (!pick) return;
+    const input = document.getElementById(pick.dataset.for);
+    if (!input) return;
+    input.value = pick.dataset.value;
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+  });
 
   const readRaw = () => {
     const raw = {};
@@ -50,6 +96,8 @@ if (spec && form && result) {
   };
 
   const run = () => {
+    syncVisibility();
+    syncPicks();
     result.innerHTML = renderResult(spec, coerce(spec, readRaw()), lang);
   };
 
@@ -90,6 +138,8 @@ if (spec && form && result) {
   if (reset) {
     reset.addEventListener('click', () => {
       form.reset();
+      fillToday();
+      for (const details of form.querySelectorAll('details.more')) details.open = false;
       history.replaceState(null, '', window.location.pathname);
       run();
     });

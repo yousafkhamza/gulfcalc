@@ -1,6 +1,14 @@
 // Calculator definitions: form fields + how results are laid out. Shared by build and browser.
 import { bahrainEndOfService, gccEndOfService, RULES } from './lib/gcc.js';
-import { contractLeave, finalSettlement, leaveEncashment, leaveSalary, noticePeriod, overtime } from './lib/pay.js';
+import {
+  contractLeave,
+  finalSettlement,
+  leaveEncashment,
+  leaveSalary,
+  noticePeriod,
+  overtime,
+  resolveLeaveBasis,
+} from './lib/pay.js';
 import { amortisation, convertSalary, flatLoan, loanEmi, mortgage, vat } from './lib/money.js';
 import { difcDews, federalGovGratuity, uaeGratuity } from './lib/uae.js';
 
@@ -39,7 +47,8 @@ const field = {
     hint,
   }),
   start: (def = '2019-03-01') => ({ id: 'start', type: 'date', default: def, label: L('Joining date', 'تاريخ الالتحاق') }),
-  end: (def = '2026-11-30') => ({ id: 'end', type: 'date', default: def, label: L('Last working day', 'آخر يوم عمل') }),
+  // today: the browser fills in today's date unless the link says otherwise.
+  end: (def = '2026-11-30') => ({ id: 'end', type: 'date', default: def, today: true, label: L('Last working day', 'آخر يوم عمل') }),
   unpaid: () => ({
     id: 'unpaid',
     type: 'number',
@@ -85,16 +94,25 @@ const field = {
       ? L('Paid on basic salary when you leave. Keep 0 to see gratuity only.', 'تُصرف على الراتب الأساسي عند ترك العمل. اتركها 0 لعرض المكافأة فقط.')
       : L('Paid on basic salary when you leave', 'تُصرف على الراتب الأساسي عند ترك العمل'),
   }),
+  annualDays: () => ({
+    id: 'annualDays',
+    type: 'number',
+    min: 1,
+    max: 60,
+    step: 0.5,
+    default: 30,
+    chips: [30, 26, 24, 22],
+    label: L('Leave days a year in your contract', 'أيام الإجازة السنوية في عقدك'),
+    hint: L('The number your offer letter or HR gives, e.g. 30, 24 or 22', 'الرقم المذكور في عرض العمل أو لدى الموارد البشرية، مثل 30 أو 24 أو 22'),
+  }),
   leaveBasis: () => ({
     id: 'leaveBasis',
     type: 'select',
-    default: 'calendar',
-    label: L('How your company counts leave days', 'كيف تحتسب شركتك أيام الإجازة'),
-    hint: L(
-      'Check your contract: 30 calendar days, or working days such as 22 or 24 a year',
-      'راجع عقدك: 30 يومًا تقويميًا، أو أيام عمل مثل 22 أو 24 يومًا في السنة',
-    ),
+    default: 'auto',
+    label: L('How those days are counted', 'طريقة احتساب هذه الأيام'),
+    hint: L('Automatic suits most contracts', 'الخيار التلقائي يناسب معظم العقود'),
     options: [
+      { value: 'auto', label: L('Automatic: 30+ = calendar days, fewer = working days', 'تلقائي: 30 فأكثر = أيام تقويمية، أقل = أيام عمل') },
       { value: 'calendar', label: L('Calendar days (÷ 30, as in the law)', 'أيام تقويمية (÷ 30، وفق القانون)') },
       { value: 'work5', label: L('Working days, 5-day week (× 12 ÷ 260)', 'أيام عمل، 5 أيام أسبوعيًا (× 12 ÷ 260)') },
       { value: 'work6', label: L('Working days, 6-day week (× 12 ÷ 312)', 'أيام عمل، 6 أيام أسبوعيًا (× 12 ÷ 312)') },
@@ -111,10 +129,23 @@ const field = {
 
 const dateError = { error: 'dates' };
 
+/** Collapsible sections of a form. Fields with `group` render inside them, in this order. */
+const GROUPS = {
+  leave: L('Add unused leave pay (optional)', 'أضف بدل الإجازة غير المستخدمة (اختياري)'),
+  more: L('More options', 'خيارات إضافية'),
+};
+const inGroup = (group, ...fields) => fields.map((f) => ({ ...f, group }));
+
 const BASIS_TEXT = {
   calendar: L('÷ 30', '÷ 30'),
   work5: L('× 12 ÷ 260', '× 12 ÷ 260'),
   work6: L('× 12 ÷ 312', '× 12 ÷ 312'),
+};
+
+const BASIS_NAME = {
+  calendar: L('Calendar days', 'أيام تقويمية'),
+  work5: L('Working days (5-day week)', 'أيام عمل (أسبوع من 5 أيام)'),
+  work6: L('Working days (6-day week)', 'أيام عمل (أسبوع من 6 أيام)'),
 };
 
 function basisText(prefix, basis) {
@@ -122,15 +153,38 @@ function basisText(prefix, basis) {
   return L(`${prefix.en} ${b.en}`, `${prefix.ar} ${b.ar}`);
 }
 
+/** "Counted as: working days (5-day week), chosen automatically" row for any leave result. */
+function countedAsRow(chosen, resolved) {
+  const name = BASIS_NAME[resolved];
+  const auto = chosen === 'auto';
+  return {
+    label: L('Leave days counted as', 'تُحتسب أيام الإجازة'),
+    value: { text: auto ? L(`${name.en} (automatic)`, `${name.ar} (تلقائي)`) : name },
+  };
+}
+
+/** Leave fields shared by gratuity and settlement: unused days, contract allowance, counting method. */
+function leaveFields({ optional }) {
+  return [field.unusedLeave(optional ? 0 : 12, optional), field.annualDays(), field.leaveBasis()];
+}
+
 function uaePrivateSpec({ notes }) {
   return {
     currency: 'AED',
-    fields: [field.basic(), field.start(), field.end(), field.unpaid(), field.dayBasis(), field.unusedLeave(), field.leaveBasis()],
+    groups: GROUPS,
+    fields: [
+      field.basic(),
+      field.start(),
+      field.end(),
+      ...inGroup('leave', ...leaveFields({ optional: true })),
+      ...inGroup('more', field.unpaid(), field.dayBasis()),
+    ],
     compute(v) {
       const r = uaeGratuity({ basic: v.basic, start: v.start, end: v.end, unpaidDays: v.unpaid, dayBasis: Number(v.dayBasis) });
       if (r.error) return dateError;
       // Optional: unused leave paid out at exit. Zero days changes nothing.
-      const leave = leaveEncashment({ basic: v.basic, days: v.unusedLeave, basis: v.leaveBasis });
+      const basis = resolveLeaveBasis(v.leaveBasis, v.annualDays);
+      const leave = leaveEncashment({ basic: v.basic, days: v.unusedLeave, basis });
       const withLeave = leave.days > 0;
       const leaveRows = withLeave
         ? [
@@ -139,7 +193,8 @@ function uaePrivateSpec({ notes }) {
               label: L(`Unused leave: ${leave.days} days`, `الإجازة غير المستخدمة: ${leave.days} يوم`),
               value: { money: leave.total },
             },
-            { label: basisText(L('Leave pay per day: basic', 'أجر يوم الإجازة: الأساسي'), v.leaveBasis), value: { money: leave.perDay } },
+            countedAsRow(v.leaveBasis, basis),
+            { label: basisText(L('Leave pay per day: basic', 'أجر يوم الإجازة: الأساسي'), basis), value: { money: leave.perDay } },
             { label: L('Total: gratuity + leave', 'الإجمالي: المكافأة + الإجازة'), value: { money: r.total + leave.total }, strong: true },
           ]
         : [];
@@ -155,7 +210,9 @@ function uaePrivateSpec({ notes }) {
             : null,
         rows: [
           { label: L('Service', 'مدة الخدمة'), value: { text: spanText(r.span) } },
-          { label: L('Unpaid leave deducted', 'الإجازة غير المدفوعة المخصومة'), value: { num: r.unpaid, digits: 0, unit: DAYS } },
+          ...(r.unpaid > 0
+            ? [{ label: L('Unpaid leave deducted', 'الإجازة غير المدفوعة المخصومة'), value: { num: r.unpaid, digits: 0, unit: DAYS } }]
+            : []),
           { label: L('Years counted', 'السنوات المحتسبة'), value: { num: r.years, digits: 3 } },
           { label: L('Daily basic wage', 'الأجر اليومي الأساسي'), value: { money: r.daily } },
           { label: L('First 5 years × 21 days', 'أول 5 سنوات × 21 يومًا'), value: { money: r.first } },
@@ -288,7 +345,18 @@ export const CALCS = {
 
   'uae-leave': {
     currency: 'AED',
+    groups: GROUPS,
     fields: [
+      {
+        id: 'mode',
+        type: 'select',
+        default: 'leave',
+        label: L('What do you want to work out?', 'ماذا تريد أن تحسب؟'),
+        options: [
+          { value: 'leave', label: L('Pay for leave I am taking', 'راتب إجازة سآخذها') },
+          { value: 'encash', label: L('Payout for unused days when I leave the job', 'بدل الأيام غير المستخدمة عند ترك العمل') },
+        ],
+      },
       field.basic('AED', 8000),
       {
         id: 'housing',
@@ -296,40 +364,22 @@ export const CALCS = {
         min: 0,
         step: 100,
         default: 3000,
+        showIf: { field: 'mode', in: ['leave'] },
         label: L('Housing allowance per month (AED)', 'بدل السكن الشهري (درهم)'),
+        hint: L('Paid with your basic salary while you are on leave', 'يُدفع مع راتبك الأساسي أثناء الإجازة'),
       },
-      {
-        id: 'annualDays',
-        type: 'number',
-        min: 0,
-        max: 60,
-        step: 0.5,
-        default: 30,
-        label: L('Annual leave in your contract (days a year)', 'الإجازة السنوية في عقدك (أيام في السنة)'),
-        hint: L('For example 30, 25, 24 or 22, as your company gives it', 'مثل 30 أو 25 أو 24 أو 22 حسب ما تمنحه شركتك'),
-      },
-      field.leaveBasis(),
+      field.annualDays(),
       {
         id: 'days',
         type: 'number',
         min: 0,
         max: 365,
         step: 0.5,
-        default: 30,
-        label: L('Leave days to calculate', 'أيام الإجازة المطلوب حسابها'),
-        hint: L('Days you are taking, or unused days left', 'الأيام التي ستأخذها أو الأيام المتبقية غير المستخدمة'),
+        default: 10,
+        label: L('Number of leave days', 'عدد أيام الإجازة'),
+        hint: L('Days you are taking, or unused days left', 'الأيام التي ستأخذها أو المتبقية غير المستخدمة'),
       },
-      {
-        id: 'mode',
-        type: 'select',
-        default: 'leave',
-        label: L('What are the days for?', 'ما نوع هذه الأيام؟'),
-        options: [
-          { value: 'leave', label: L('Taking annual leave', 'إجازة سنوية سأتمتع بها') },
-          { value: 'encash', label: L('Unused days paid when leaving the job', 'أيام غير مستخدمة تُصرف عند ترك العمل') },
-        ],
-      },
-      {
+      ...inGroup('more', field.leaveBasis(), {
         id: 'service',
         type: 'number',
         min: 0,
@@ -337,14 +387,16 @@ export const CALCS = {
         step: 1,
         default: 24,
         label: L('Months of service', 'أشهر الخدمة'),
-        hint: L('Used to check what you have earned', 'للتحقق من الأيام التي استحققتها'),
-      },
+        hint: L('Checks what you have earned in your first year', 'للتحقق مما استحققته في السنة الأولى'),
+      }),
     ],
     compute(v) {
-      const r = leaveSalary({ basic: v.basic, housing: v.housing, days: v.days, mode: v.mode, basis: v.leaveBasis });
-      const c = contractLeave({ annualDays: v.annualDays, basis: v.leaveBasis, serviceMonths: v.service });
-      const working = v.leaveBasis !== 'calendar';
+      const basis = resolveLeaveBasis(v.leaveBasis, v.annualDays);
+      const r = leaveSalary({ basic: v.basic, housing: v.housing, days: v.days, mode: v.mode, basis });
+      const c = contractLeave({ annualDays: v.annualDays, basis, serviceMonths: v.service });
+      const working = basis !== 'calendar';
       const unit = working ? L('working days', 'يوم عمل') : DAYS;
+      const n = (x) => (x % 1 ? x.toFixed(1) : String(x));
       let badge = null;
       if (v.service < 6) {
         badge = { tone: 'warn', text: L('Paid annual leave starts after 6 months of service.', 'تبدأ الإجازة السنوية المدفوعة بعد 6 أشهر من الخدمة.') };
@@ -352,49 +404,46 @@ export const CALCS = {
         badge = {
           tone: 'warn',
           text: L(
-            'Your contract gives less than the legal minimum of 30 calendar days a year. The law applies instead.',
+            'Your contract gives less than the legal minimum of 30 calendar days a year, so the law applies instead.',
             'يمنحك عقدك أقل من الحد الأدنى القانوني البالغ 30 يومًا تقويميًا في السنة، لذا يُطبَّق القانون.',
           ),
         };
-      } else if (r.days > c.earned && v.mode === 'leave') {
+      } else if (v.mode === 'leave' && r.days > c.earned) {
         badge = {
           tone: 'info',
-          text: L('These are more days than you earn in a year. Check your carried-over balance.', 'هذه أيام أكثر مما تستحقه في سنة. تحقق من رصيدك المرحّل.'),
+          text: L('That is more than you earn in a year. Check your carried-over balance.', 'هذا أكثر مما تستحقه في سنة. تحقق من رصيدك المرحّل.'),
         };
       }
+      const contractText = working
+        ? L(
+            `${n(c.annualDays)} working days a year (about ${c.equivalent.toFixed(1)} calendar days off)`,
+            `${n(c.annualDays)} يوم عمل في السنة (نحو ${c.equivalent.toFixed(1)} يومًا تقويميًا من الإجازة)`,
+          )
+        : L(`${n(c.annualDays)} days a year`, `${n(c.annualDays)} يومًا في السنة`);
       return {
-        label: v.mode === 'encash' ? L('Leave encashment', 'بدل الإجازة غير المستخدمة') : L('Leave salary', 'راتب الإجازة'),
+        label: v.mode === 'encash' ? L('Payout for unused leave', 'بدل الإجازة غير المستخدمة') : L('Leave salary', 'راتب الإجازة'),
         big: { money: r.total },
         badge,
         rows: [
+          { label: L('Days', 'الأيام'), value: { num: r.days, digits: r.days % 1 ? 1 : 0, unit } },
           {
-            label: L('Pay per day', 'الأجر عن اليوم'),
+            label:
+              v.mode === 'encash'
+                ? basisText(L('Pay per day: basic', 'أجر اليوم: الأساسي'), basis)
+                : basisText(L('Pay per day: (basic + housing)', 'أجر اليوم: (الأساسي + السكن)'), basis),
             value: { money: r.perDay },
           },
+          countedAsRow(v.leaveBasis, basis),
+          { label: L('Your contract', 'عقدك'), value: { text: contractText } },
           {
-            label: L('Based on', 'يُحسب على أساس'),
-            value: {
-              text:
-                v.mode === 'encash'
-                  ? basisText(L('Basic salary', 'الراتب الأساسي'), v.leaveBasis)
-                  : basisText(L('(Basic + housing)', '(الأساسي + السكن)'), v.leaveBasis),
-            },
-          },
-          { label: L('Days', 'الأيام'), value: { num: r.days, digits: r.days % 1 ? 1 : 0, unit } },
-          { label: L('Your contract', 'عقدك'), value: { num: c.annualDays, digits: c.annualDays % 1 ? 1 : 0, unit: working ? L('working days a year', 'يوم عمل في السنة') : L('days a year', 'يوم في السنة') } },
-          ...(working
-            ? [{ label: L('Time off it covers', 'مدة الإجازة الفعلية'), value: { num: c.equivalent, digits: 1, unit: L('calendar days', 'يوم تقويمي') } }]
-            : []),
-          {
-            label: v.service < 12 ? L('Earned so far (first year)', 'المستحق حتى الآن (السنة الأولى)') : L('Earned each year', 'المستحق كل سنة'),
+            label: v.service < 12 ? L('Earned so far (first year)', 'المستحق حتى الآن (السنة الأولى)') : L('You earn each year', 'تستحق كل سنة'),
             value: { num: c.earned, digits: c.earned % 1 ? 1 : 0, unit },
           },
-          { label: L('Legal minimum for your service', 'الحد الأدنى القانوني لمدة خدمتك'), value: { num: c.lawDays, digits: 0, unit: L('calendar days', 'يوم تقويمي') } },
         ],
         notes: [
           L(
-            'Article 29 of Decree-Law 33/2021: 2 days per month after 6 months of service, 30 calendar days a year after the first year. Companies can give more, and many count leave in working days.',
-            'المادة 29 من المرسوم بقانون 33/2021: يومان عن كل شهر بعد 6 أشهر خدمة، و30 يومًا تقويميًا سنويًا بعد السنة الأولى. يمكن للشركات منح أكثر، وكثير منها يحتسب الإجازة بأيام العمل.',
+            'Article 29 of Decree-Law 33/2021: at least 2 days a month after 6 months of service, and 30 calendar days a year after the first year. Companies can give more, and many count leave in working days. Leave pay includes housing allowance; unused days paid at exit use basic salary only.',
+            'المادة 29 من المرسوم بقانون 33/2021: يومان على الأقل عن كل شهر بعد 6 أشهر خدمة، و30 يومًا تقويميًا سنويًا بعد السنة الأولى. يمكن للشركات منح أكثر، وكثير منها يحتسب الإجازة بأيام العمل. راتب الإجازة يشمل بدل السكن، أما الأيام غير المستخدمة عند ترك العمل فتُصرف على الأساسي فقط.',
           ),
         ],
       };
@@ -447,7 +496,7 @@ export const CALCS = {
   'uae-notice': {
     currency: 'AED',
     fields: [
-      { id: 'noticeDate', type: 'date', default: '2026-12-01', label: L('Date notice is given', 'تاريخ تقديم الإنذار') },
+      { id: 'noticeDate', type: 'date', default: '2026-12-01', today: true, label: L('Date notice is given', 'تاريخ تقديم الإنذار') },
       {
         id: 'days',
         type: 'select',
@@ -493,20 +542,25 @@ export const CALCS = {
 
   'uae-settlement': {
     currency: 'AED',
+    groups: GROUPS,
     fields: [
       field.basic('AED', 8000),
       { id: 'monthly', type: 'number', min: 0, step: 100, default: 12000, label: L('Total monthly salary (AED)', 'إجمالي الراتب الشهري (درهم)'), hint: L('Basic plus all allowances', 'الأساسي مع كل البدلات') },
       field.start(),
       field.end(),
-      field.unusedLeave(12, false),
-      field.leaveBasis(),
+      ...leaveFields({ optional: false }).slice(0, 2),
       { id: 'salaryDays', type: 'number', min: 0, max: 366, step: 1, default: 30, label: L('Days of salary not yet paid', 'أيام راتب لم تُدفع بعد') },
-      { id: 'noticeDays', type: 'number', min: 0, max: 90, step: 1, default: 0, label: L('Notice days paid instead of worked', 'أيام إنذار تُدفع بدل العمل') },
-      { id: 'other', type: 'number', min: 0, step: 100, default: 0, label: L('Other amounts owed to you (AED)', 'مبالغ أخرى مستحقة لك (درهم)'), hint: L('For example a ticket allowance or bonus', 'مثل بدل تذكرة السفر أو مكافأة') },
-      { id: 'deductions', type: 'number', min: 0, step: 100, default: 0, label: L('Deductions (AED)', 'الاستقطاعات (درهم)'), hint: L('For example a salary advance or loan', 'مثل سلفة على الراتب أو قرض') },
-      field.unpaid(),
+      ...inGroup(
+        'more',
+        field.leaveBasis(),
+        { id: 'noticeDays', type: 'number', min: 0, max: 90, step: 1, default: 0, label: L('Notice days paid instead of worked', 'أيام إنذار تُدفع بدل العمل') },
+        { id: 'other', type: 'number', min: 0, step: 100, default: 0, label: L('Other amounts owed to you (AED)', 'مبالغ أخرى مستحقة لك (درهم)'), hint: L('For example a ticket allowance or bonus', 'مثل بدل تذكرة السفر أو مكافأة') },
+        { id: 'deductions', type: 'number', min: 0, step: 100, default: 0, label: L('Deductions (AED)', 'الاستقطاعات (درهم)'), hint: L('For example a salary advance or loan', 'مثل سلفة على الراتب أو قرض') },
+        field.unpaid(),
+      ),
     ],
     compute(v) {
+      const basis = resolveLeaveBasis(v.leaveBasis, v.annualDays);
       const r = finalSettlement({
         basic: v.basic,
         monthly: v.monthly,
@@ -514,7 +568,7 @@ export const CALCS = {
         end: v.end,
         unpaidLeaveDays: v.unpaid,
         unusedLeaveDays: v.unusedLeave,
-        leaveBasis: v.leaveBasis,
+        leaveBasis: basis,
         salaryDays: v.salaryDays,
         noticeDays: v.noticeDays,
         other: v.other,
@@ -526,7 +580,8 @@ export const CALCS = {
         big: { money: r.total },
         rows: [
           { label: L('Gratuity', 'مكافأة نهاية الخدمة'), value: { money: r.gratuity.total } },
-          { label: basisText(L('Unused leave: basic', 'الإجازة غير المستخدمة: الأساسي'), v.leaveBasis), value: { money: r.leave } },
+          { label: basisText(L('Unused leave: basic', 'الإجازة غير المستخدمة: الأساسي'), basis), value: { money: r.leave } },
+          countedAsRow(v.leaveBasis, basis),
           { label: L('Unpaid salary (total ÷ 30)', 'الراتب غير المدفوع (الإجمالي ÷ 30)'), value: { money: r.salary } },
           { label: L('Notice pay', 'بدل الإنذار'), value: { money: r.notice } },
           { label: L('Other amounts', 'مبالغ أخرى'), value: { money: r.other } },

@@ -17,6 +17,15 @@ export function leaveEntitlement(serviceMonths) {
  */
 export const LEAVE_BASIS = { calendar: 30, work5: 260 / 12, work6: 312 / 12 };
 
+/**
+ * 'auto' picks the counting method from the contract: 30 or more days a year is almost always
+ * calendar days (the law's measure); fewer (22, 24, 25, 26…) is almost always working days.
+ */
+export function resolveLeaveBasis(basis, annualDays) {
+  if (basis in LEAVE_BASIS) return basis;
+  return (annualDays ?? 30) >= 30 ? 'calendar' : 'work5';
+}
+
 export function leaveDayRate(monthly, basis = 'calendar') {
   return monthly / (LEAVE_BASIS[basis] ?? LEAVE_BASIS.calendar);
 }

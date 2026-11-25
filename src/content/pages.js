@@ -370,7 +370,10 @@ export const PAGES = [
     how: [
       L('On leave: (basic + housing) ÷ 30 × days', 'أثناء الإجازة: (الأساسي + السكن) ÷ 30 × الأيام'),
       L('Unused days at exit: basic ÷ 30 × days', 'الأيام غير المستخدمة عند ترك العمل: الأساسي ÷ 30 × الأيام'),
-      L('Leave in working days: × 12 ÷ 260 (5-day week)', 'الإجازة بأيام العمل: × 12 ÷ 260 (أسبوع من 5 أيام)'),
+      L(
+        'Contracts under 30 days (e.g. 24 or 22) count working days: × 12 ÷ 260. Change it under More options.',
+        'العقود الأقل من 30 يومًا (مثل 24 أو 22) تحتسب أيام العمل: × 12 ÷ 260. يمكنك تغييرها من خيارات إضافية.',
+      ),
       L('Your contract\'s own allowance is used if it is better than the law', 'يُطبَّق رصيد عقدك إذا كان أفضل من القانون'),
       L('6 to 12 months of service: 2 days per month', 'من 6 إلى 12 شهرًا: يومان عن كل شهر'),
       L('After 1 year: 30 days a year', 'بعد سنة: 30 يومًا سنويًا'),

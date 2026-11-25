@@ -12,6 +12,7 @@ import {
   leaveSalary,
   noticePeriod,
   overtime,
+  resolveLeaveBasis,
 } from '../src/lib/pay.js';
 import { CALCS } from '../src/calculators.js';
 import { coerce, defaults } from '../src/render.js';
@@ -138,6 +139,35 @@ describe('pay, leave and notice', () => {
     const fine = spec.compute(coerce(spec, { ...defaults(spec), annualDays: '24', leaveBasis: 'work5', days: '10' }));
     assert.equal(fine.badge, null);
     near(fine.big.money, ((8000 + 3000) * 12) / 260 * 10);
+  });
+  it('automatic counting: 30+ days are calendar days, fewer are working days', () => {
+    assert.equal(resolveLeaveBasis('auto', 30), 'calendar');
+    assert.equal(resolveLeaveBasis('auto', 35), 'calendar');
+    assert.equal(resolveLeaveBasis('auto', 24), 'work5');
+    assert.equal(resolveLeaveBasis('auto', 22), 'work5');
+    assert.equal(resolveLeaveBasis('work6', 22), 'work6'); // an explicit choice always wins
+    assert.equal(resolveLeaveBasis('calendar', 24), 'calendar');
+  });
+  it('leave calculator: 24 or 22 contract days just work without opening More options', () => {
+    const spec = CALCS['uae-leave'];
+    for (const annualDays of ['24', '22']) {
+      const out = spec.compute(coerce(spec, { ...defaults(spec), mode: 'encash', annualDays, days: '10' }));
+      near(out.big.money, (8000 * 12) / 260 * 10); // payout uses basic only, per working day
+      const counted = out.rows.find((r) => r.label.en === 'Leave days counted as');
+      assert.match(counted.value.text.en, /Working days \(5-day week\) \(automatic\)/);
+    }
+    const thirty = spec.compute(coerce(spec, { ...defaults(spec), mode: 'encash', annualDays: '30', days: '10' }));
+    near(thirty.big.money, (8000 / 30) * 10);
+  });
+  it('gratuity and settlement use the same automatic leave counting', () => {
+    const g = CALCS['uae-gratuity'];
+    const base = { ...defaults(g), basic: '9000', start: '2021-01-01', end: '2023-12-31', unusedLeave: '10' };
+    near(g.compute(coerce(g, { ...base, annualDays: '22' })).big.money, 18900 + (9000 * 12) / 260 * 10);
+    near(g.compute(coerce(g, { ...base, annualDays: '30' })).big.money, 18900 + 3000);
+    const s = CALCS['uae-settlement'];
+    const settled = s.compute(coerce(s, { ...defaults(s), basic: '6500', annualDays: '24', unusedLeave: '10' }));
+    const leaveRow = settled.rows.find((r) => r.label.en.startsWith('Unused leave'));
+    near(leaveRow.value.money, 3000);
   });
   it('leave salary can use working days', () => {
     near(leaveSalary({ basic: 4500, housing: 2000, days: 10, mode: 'leave', basis: 'work5' }).total, 3000);

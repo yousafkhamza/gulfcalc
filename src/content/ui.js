@@ -28,6 +28,8 @@ export const UI = {
     },
     calc: {
       inputs: 'Your details',
+      result: 'Your result',
+      picks: 'Common values',
       copy: 'Copy result link',
       copied: 'Link copied',
       copyFail: 'Copy the link from the address bar',
@@ -86,6 +88,8 @@ export const UI = {
     },
     calc: {
       inputs: 'بياناتك',
+      result: 'النتيجة',
+      picks: 'قيم شائعة',
       copy: 'نسخ رابط النتيجة',
       copied: 'تم نسخ الرابط',
       copyFail: 'انسخ الرابط من شريط العنوان',
