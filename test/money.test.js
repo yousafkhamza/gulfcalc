@@ -3,7 +3,16 @@ import { describe, it } from 'node:test';
 
 import { parseDate } from '../src/lib/dates.js';
 import { amortisation, convertSalary, equivalentRate, flatLoan, loanEmi, mortgage, vat } from '../src/lib/money.js';
-import { finalSettlement, leaveDayRate, leaveEncashment, leaveEntitlement, leaveSalary, noticePeriod, overtime } from '../src/lib/pay.js';
+import {
+  contractLeave,
+  finalSettlement,
+  leaveDayRate,
+  leaveEncashment,
+  leaveEntitlement,
+  leaveSalary,
+  noticePeriod,
+  overtime,
+} from '../src/lib/pay.js';
 import { CALCS } from '../src/calculators.js';
 import { coerce, defaults } from '../src/render.js';
 
@@ -98,6 +107,37 @@ describe('pay, leave and notice', () => {
     near(leaveEncashment({ basic: 8000, days: 10 }).total, 8000 / 30 * 10);
     near(leaveEncashment({ basic: 6500, days: 10, basis: 'work5' }).total, 3000);
     assert.equal(leaveEncashment({ basic: 8000, days: -3 }).total, 0);
+  });
+  it('company leave: 24 working days on a 5-day week beats the law', () => {
+    const c = contractLeave({ annualDays: 24, basis: 'work5', serviceMonths: 36 });
+    near(c.equivalent, 33.6);
+    assert.equal(c.belowLaw, false);
+    assert.equal(c.earned, 24);
+    assert.equal(c.lawDays, 30);
+  });
+  it('company leave: a contract below the law is lifted to the legal minimum', () => {
+    const c = contractLeave({ annualDays: 20, basis: 'work5', serviceMonths: 24 });
+    assert.equal(c.belowLaw, true); // 20 × 1.4 = 28 calendar days
+    near(c.earned, 30 / 1.4); // ≈ 21.43 working days
+    const calendar = contractLeave({ annualDays: 25, basis: 'calendar', serviceMonths: 24 });
+    assert.equal(calendar.belowLaw, true);
+    assert.equal(calendar.earned, 30);
+  });
+  it('company leave: first year earns pro rata, nothing before 6 months', () => {
+    assert.equal(contractLeave({ annualDays: 30, serviceMonths: 5 }).earned, 0);
+    assert.equal(contractLeave({ annualDays: 30, serviceMonths: 8 }).earned, 20); // 30 × 8 ÷ 12 beats 16
+    assert.equal(contractLeave({ annualDays: 30, serviceMonths: 8 }).lawDays, 16);
+    near(contractLeave({ annualDays: 22, basis: 'work5', serviceMonths: 9 }).earned, 16.5); // 22 × 9 ÷ 12 = 16.5 > 18 ÷ 1.4
+  });
+  it('leave calculator warns about contracts below the law and leave before 6 months', () => {
+    const spec = CALCS['uae-leave'];
+    const low = spec.compute(coerce(spec, { ...defaults(spec), annualDays: '20', leaveBasis: 'work5' }));
+    assert.equal(low.badge.tone, 'warn');
+    const early = spec.compute(coerce(spec, { ...defaults(spec), service: '3' }));
+    assert.ok(/6 months/.test(early.badge.text.en));
+    const fine = spec.compute(coerce(spec, { ...defaults(spec), annualDays: '24', leaveBasis: 'work5', days: '10' }));
+    assert.equal(fine.badge, null);
+    near(fine.big.money, ((8000 + 3000) * 12) / 260 * 10);
   });
   it('leave salary can use working days', () => {
     near(leaveSalary({ basic: 4500, housing: 2000, days: 10, mode: 'leave', basis: 'work5' }).total, 3000);

@@ -1,6 +1,6 @@
 // Calculator definitions: form fields + how results are laid out. Shared by build and browser.
 import { bahrainEndOfService, gccEndOfService, RULES } from './lib/gcc.js';
-import { finalSettlement, leaveEncashment, leaveEntitlement, leaveSalary, noticePeriod, overtime } from './lib/pay.js';
+import { contractLeave, finalSettlement, leaveEncashment, leaveSalary, noticePeriod, overtime } from './lib/pay.js';
 import { amortisation, convertSalary, flatLoan, loanEmi, mortgage, vat } from './lib/money.js';
 import { difcDews, federalGovGratuity, uaeGratuity } from './lib/uae.js';
 
@@ -44,6 +44,7 @@ const field = {
     id: 'unpaid',
     type: 'number',
     min: 0,
+    max: 3650,
     step: 1,
     default: 0,
     label: L('Unpaid leave days', 'أيام الإجازة غير المدفوعة'),
@@ -246,11 +247,12 @@ export const CALCS = {
       field.basic('AED', 15000),
       field.start('2018-09-01'),
       field.end(),
-      { id: 'notice', type: 'number', min: 0, step: 1, default: 30, label: L('Notice period (days)', 'مدة الإنذار (أيام)') },
+      { id: 'notice', type: 'number', min: 0, max: 90, step: 1, default: 30, label: L('Notice period (days)', 'مدة الإنذار (أيام)') },
       {
         id: 'unusedLeave',
         type: 'number',
         min: 0,
+        max: 365,
         step: 1,
         default: 0,
         label: L('Unused leave days', 'أيام الإجازة غير المستخدمة'),
@@ -296,7 +298,27 @@ export const CALCS = {
         default: 3000,
         label: L('Housing allowance per month (AED)', 'بدل السكن الشهري (درهم)'),
       },
-      { id: 'days', type: 'number', min: 0, max: 365, step: 1, default: 30, label: L('Leave days', 'أيام الإجازة') },
+      {
+        id: 'annualDays',
+        type: 'number',
+        min: 0,
+        max: 60,
+        step: 0.5,
+        default: 30,
+        label: L('Annual leave in your contract (days a year)', 'الإجازة السنوية في عقدك (أيام في السنة)'),
+        hint: L('For example 30, 25, 24 or 22, as your company gives it', 'مثل 30 أو 25 أو 24 أو 22 حسب ما تمنحه شركتك'),
+      },
+      field.leaveBasis(),
+      {
+        id: 'days',
+        type: 'number',
+        min: 0,
+        max: 365,
+        step: 0.5,
+        default: 30,
+        label: L('Leave days to calculate', 'أيام الإجازة المطلوب حسابها'),
+        hint: L('Days you are taking, or unused days left', 'الأيام التي ستأخذها أو الأيام المتبقية غير المستخدمة'),
+      },
       {
         id: 'mode',
         type: 'select',
@@ -307,23 +329,43 @@ export const CALCS = {
           { value: 'encash', label: L('Unused days paid when leaving the job', 'أيام غير مستخدمة تُصرف عند ترك العمل') },
         ],
       },
-      field.leaveBasis(),
       {
         id: 'service',
         type: 'number',
         min: 0,
+        max: 600,
         step: 1,
         default: 24,
         label: L('Months of service', 'أشهر الخدمة'),
-        hint: L('Used to show how many days you earn a year', 'لمعرفة عدد أيام الإجازة المستحقة سنويًا'),
+        hint: L('Used to check what you have earned', 'للتحقق من الأيام التي استحققتها'),
       },
     ],
     compute(v) {
       const r = leaveSalary({ basic: v.basic, housing: v.housing, days: v.days, mode: v.mode, basis: v.leaveBasis });
-      const yearly = leaveEntitlement(v.service);
+      const c = contractLeave({ annualDays: v.annualDays, basis: v.leaveBasis, serviceMonths: v.service });
+      const working = v.leaveBasis !== 'calendar';
+      const unit = working ? L('working days', 'يوم عمل') : DAYS;
+      let badge = null;
+      if (v.service < 6) {
+        badge = { tone: 'warn', text: L('Paid annual leave starts after 6 months of service.', 'تبدأ الإجازة السنوية المدفوعة بعد 6 أشهر من الخدمة.') };
+      } else if (c.belowLaw) {
+        badge = {
+          tone: 'warn',
+          text: L(
+            'Your contract gives less than the legal minimum of 30 calendar days a year. The law applies instead.',
+            'يمنحك عقدك أقل من الحد الأدنى القانوني البالغ 30 يومًا تقويميًا في السنة، لذا يُطبَّق القانون.',
+          ),
+        };
+      } else if (r.days > c.earned && v.mode === 'leave') {
+        badge = {
+          tone: 'info',
+          text: L('These are more days than you earn in a year. Check your carried-over balance.', 'هذه أيام أكثر مما تستحقه في سنة. تحقق من رصيدك المرحّل.'),
+        };
+      }
       return {
         label: v.mode === 'encash' ? L('Leave encashment', 'بدل الإجازة غير المستخدمة') : L('Leave salary', 'راتب الإجازة'),
         big: { money: r.total },
+        badge,
         rows: [
           {
             label: L('Pay per day', 'الأجر عن اليوم'),
@@ -338,13 +380,21 @@ export const CALCS = {
                   : basisText(L('(Basic + housing)', '(الأساسي + السكن)'), v.leaveBasis),
             },
           },
-          { label: L('Days', 'الأيام'), value: { num: r.days, digits: 0, unit: DAYS } },
-          { label: L('Your yearly entitlement', 'استحقاقك السنوي'), value: { num: yearly, digits: 0, unit: DAYS } },
+          { label: L('Days', 'الأيام'), value: { num: r.days, digits: r.days % 1 ? 1 : 0, unit } },
+          { label: L('Your contract', 'عقدك'), value: { num: c.annualDays, digits: c.annualDays % 1 ? 1 : 0, unit: working ? L('working days a year', 'يوم عمل في السنة') : L('days a year', 'يوم في السنة') } },
+          ...(working
+            ? [{ label: L('Time off it covers', 'مدة الإجازة الفعلية'), value: { num: c.equivalent, digits: 1, unit: L('calendar days', 'يوم تقويمي') } }]
+            : []),
+          {
+            label: v.service < 12 ? L('Earned so far (first year)', 'المستحق حتى الآن (السنة الأولى)') : L('Earned each year', 'المستحق كل سنة'),
+            value: { num: c.earned, digits: c.earned % 1 ? 1 : 0, unit },
+          },
+          { label: L('Legal minimum for your service', 'الحد الأدنى القانوني لمدة خدمتك'), value: { num: c.lawDays, digits: 0, unit: L('calendar days', 'يوم تقويمي') } },
         ],
         notes: [
           L(
-            'Article 29 of Decree-Law 33/2021: 2 days per month after 6 months of service, 30 days a year after the first year.',
-            'المادة 29 من المرسوم بقانون 33/2021: يومان عن كل شهر بعد 6 أشهر خدمة، و30 يومًا سنويًا بعد السنة الأولى.',
+            'Article 29 of Decree-Law 33/2021: 2 days per month after 6 months of service, 30 calendar days a year after the first year. Companies can give more, and many count leave in working days.',
+            'المادة 29 من المرسوم بقانون 33/2021: يومان عن كل شهر بعد 6 أشهر خدمة، و30 يومًا تقويميًا سنويًا بعد السنة الأولى. يمكن للشركات منح أكثر، وكثير منها يحتسب الإجازة بأيام العمل.',
           ),
         ],
       };
@@ -355,10 +405,10 @@ export const CALCS = {
     currency: 'AED',
     fields: [
       field.basic('AED', 6000),
-      { id: 'normal', type: 'number', min: 0, step: 0.5, default: 10, label: L('Normal overtime hours (+25%)', 'ساعات إضافية عادية (+25%)') },
-      { id: 'night', type: 'number', min: 0, step: 0.5, default: 4, label: L('Hours between 10 pm and 4 am (+50%)', 'ساعات بين 10 مساءً و4 صباحًا (+50%)') },
-      { id: 'rest', type: 'number', min: 0, step: 0.5, default: 0, label: L('Hours on your rest day (+50%)', 'ساعات في يوم الراحة (+50%)') },
-      { id: 'holiday', type: 'number', min: 0, step: 0.5, default: 0, label: L('Hours on a public holiday (+50%)', 'ساعات في عطلة رسمية (+50%)') },
+      { id: 'normal', type: 'number', min: 0, max: 744, step: 0.5, default: 10, label: L('Normal overtime hours (+25%)', 'ساعات إضافية عادية (+25%)') },
+      { id: 'night', type: 'number', min: 0, max: 744, step: 0.5, default: 4, label: L('Hours between 10 pm and 4 am (+50%)', 'ساعات بين 10 مساءً و4 صباحًا (+50%)') },
+      { id: 'rest', type: 'number', min: 0, max: 744, step: 0.5, default: 0, label: L('Hours on your rest day (+50%)', 'ساعات في يوم الراحة (+50%)') },
+      { id: 'holiday', type: 'number', min: 0, max: 744, step: 0.5, default: 0, label: L('Hours on a public holiday (+50%)', 'ساعات في عطلة رسمية (+50%)') },
     ],
     compute(v) {
       const r = overtime(v);
@@ -366,8 +416,15 @@ export const CALCS = {
         label: L('Overtime pay', 'أجر العمل الإضافي'),
         big: { money: r.total },
         badge:
-          r.hours > 144
-            ? { tone: 'warn', text: L('More than 144 overtime hours in 3 weeks is over the legal limit.', 'أكثر من 144 ساعة إضافية خلال 3 أسابيع يتجاوز الحد القانوني.') }
+          // Article 19: overtime may not exceed 2 hours a day, so a month allows at most about 62 hours.
+          r.hours > 62
+            ? {
+                tone: 'warn',
+                text: L(
+                  'That is more than 2 hours a day for a whole month. The law allows at most 2 overtime hours a day.',
+                  'هذا أكثر من ساعتين يوميًا لشهر كامل. يسمح القانون بساعتين إضافيتين يوميًا كحد أقصى.',
+                ),
+              }
             : null,
         rows: [
           { label: L('Hourly basic wage (basic ÷ 30 ÷ 8)', 'الأجر الأساسي للساعة (الأساسي ÷ 30 ÷ 8)'), value: { money: r.hourly } },
@@ -443,8 +500,8 @@ export const CALCS = {
       field.end(),
       field.unusedLeave(12, false),
       field.leaveBasis(),
-      { id: 'salaryDays', type: 'number', min: 0, step: 1, default: 30, label: L('Days of salary not yet paid', 'أيام راتب لم تُدفع بعد') },
-      { id: 'noticeDays', type: 'number', min: 0, step: 1, default: 0, label: L('Notice days paid instead of worked', 'أيام إنذار تُدفع بدل العمل') },
+      { id: 'salaryDays', type: 'number', min: 0, max: 366, step: 1, default: 30, label: L('Days of salary not yet paid', 'أيام راتب لم تُدفع بعد') },
+      { id: 'noticeDays', type: 'number', min: 0, max: 90, step: 1, default: 0, label: L('Notice days paid instead of worked', 'أيام إنذار تُدفع بدل العمل') },
       { id: 'other', type: 'number', min: 0, step: 100, default: 0, label: L('Other amounts owed to you (AED)', 'مبالغ أخرى مستحقة لك (درهم)'), hint: L('For example a ticket allowance or bonus', 'مثل بدل تذكرة السفر أو مكافأة') },
       { id: 'deductions', type: 'number', min: 0, step: 100, default: 0, label: L('Deductions (AED)', 'الاستقطاعات (درهم)'), hint: L('For example a salary advance or loan', 'مثل سلفة على الراتب أو قرض') },
       field.unpaid(),

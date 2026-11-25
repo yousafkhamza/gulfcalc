@@ -371,6 +371,7 @@ export const PAGES = [
       L('On leave: (basic + housing) ÷ 30 × days', 'أثناء الإجازة: (الأساسي + السكن) ÷ 30 × الأيام'),
       L('Unused days at exit: basic ÷ 30 × days', 'الأيام غير المستخدمة عند ترك العمل: الأساسي ÷ 30 × الأيام'),
       L('Leave in working days: × 12 ÷ 260 (5-day week)', 'الإجازة بأيام العمل: × 12 ÷ 260 (أسبوع من 5 أيام)'),
+      L('Your contract\'s own allowance is used if it is better than the law', 'يُطبَّق رصيد عقدك إذا كان أفضل من القانون'),
       L('6 to 12 months of service: 2 days per month', 'من 6 إلى 12 شهرًا: يومان عن كل شهر'),
       L('After 1 year: 30 days a year', 'بعد سنة: 30 يومًا سنويًا'),
     ],
@@ -381,6 +382,15 @@ export const PAGES = [
           L(
             'Under Article 29 of the Labour Law you earn 2 days of paid leave for each month once you have worked 6 months, and 30 days a year after your first year. Part-time workers earn leave in proportion to their hours. Public holidays inside your leave are not counted as leave days.',
             'وفق المادة 29 من قانون العمل تستحق يومين إجازة مدفوعة عن كل شهر بعد إتمام 6 أشهر، و30 يومًا سنويًا بعد السنة الأولى. ويستحق العامل بدوام جزئي إجازة بنسبة ساعات عمله. ولا تُحتسب العطلات الرسمية الواقعة ضمن الإجازة من أيامها.',
+          ),
+        ],
+      },
+      {
+        h: L('Every company counts leave differently', 'كل شركة تحتسب الإجازة بطريقة مختلفة'),
+        p: [
+          L(
+            'The law is a minimum. Many companies give more, or count leave in working days: 22, 24 or 25 working days a year are common. Because weekends are not counted, 24 working days on a 5-day week cover about 33.6 calendar days of time off, which is more than the legal 30. Enter your contract\'s allowance and how it is counted, and the calculator values each day correctly and warns you if the contract falls below the law.',
+            'القانون حد أدنى. وكثير من الشركات تمنح أكثر، أو تحتسب الإجازة بأيام العمل: 22 أو 24 أو 25 يوم عمل في السنة أمر شائع. ولأن عطلات نهاية الأسبوع لا تُحتسب، فإن 24 يوم عمل في أسبوع من 5 أيام تغطي نحو 33.6 يومًا تقويميًا من الإجازة، أي أكثر من الثلاثين يومًا القانونية. أدخل رصيد عقدك وطريقة احتسابه، وستقيّم الحاسبة كل يوم بشكل صحيح وتنبهك إذا كان العقد أقل من القانون.',
           ),
         ],
       },

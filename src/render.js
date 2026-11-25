@@ -78,6 +78,8 @@ function bigValue(value, code, lang) {
   return fmtValue(value, code, lang);
 }
 
+export const MAX_NUMBER = 1e9;
+
 /** Turn raw form strings into typed values using the field definitions. */
 export function coerce(spec, raw) {
   const values = {};
@@ -87,7 +89,8 @@ export function coerce(spec, raw) {
       let n = parseFloat(String(input).replace(/,/g, ''));
       if (!Number.isFinite(n)) n = 0;
       if (field.min !== undefined) n = Math.max(field.min, n);
-      if (field.max !== undefined) n = Math.min(field.max, n);
+      // Every number has an upper bound so absurd input can't overflow dates or money.
+      n = Math.min(field.max ?? MAX_NUMBER, n);
       values[field.id] = n;
     } else if (field.type === 'date') {
       values[field.id] = parseDate(String(input));

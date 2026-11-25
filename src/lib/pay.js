@@ -21,6 +21,38 @@ export function leaveDayRate(monthly, basis = 'calendar') {
   return monthly / (LEAVE_BASIS[basis] ?? LEAVE_BASIS.calendar);
 }
 
+/** Calendar days of time off that a contract's leave covers (5 working days ≈ 7 calendar days). */
+export function calendarEquivalent(days, basis = 'calendar') {
+  const factor = basis === 'work5' ? 7 / 5 : basis === 'work6' ? 7 / 6 : 1;
+  return Math.max(0, days || 0) * factor;
+}
+
+/**
+ * Compare a company's leave with the law. Article 29 sets a minimum; contracts may give more,
+ * and many count leave in working days (22, 24, 25…) instead of 30 calendar days.
+ * earned: days the worker has built up so far in the first year, or the full year after that.
+ */
+export function contractLeave({ annualDays, basis = 'calendar', serviceMonths = 12 }) {
+  const days = Math.max(0, annualDays || 0);
+  const months = Math.max(0, serviceMonths || 0);
+  const lawDays = leaveEntitlement(months);
+  const equivalent = calendarEquivalent(days, basis);
+  // Calendar days per contract day: 1 for calendar days, 1.4 for a 5-day week, 7/6 for a 6-day week.
+  const factor = calendarEquivalent(1, basis);
+  // The worker gets whichever is better: the contract, or the legal minimum expressed in contract days.
+  let earned;
+  if (months < 6) earned = 0;
+  else if (months < 12) earned = Math.max((days * Math.floor(months)) / 12, (2 * Math.floor(months)) / factor);
+  else earned = Math.max(days, 30 / factor);
+  return {
+    annualDays: days,
+    equivalent,
+    lawDays,
+    belowLaw: equivalent < 30,
+    earned,
+  };
+}
+
 /** Pay for unused leave days paid out when the job ends: basic wage only (Article 29). */
 export function leaveEncashment({ basic, days, basis = 'calendar' }) {
   const n = Math.max(0, days || 0);
