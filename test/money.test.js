@@ -3,7 +3,9 @@ import { describe, it } from 'node:test';
 
 import { parseDate } from '../src/lib/dates.js';
 import { amortisation, convertSalary, equivalentRate, flatLoan, loanEmi, mortgage, vat } from '../src/lib/money.js';
-import { finalSettlement, leaveEntitlement, leaveSalary, noticePeriod, overtime } from '../src/lib/pay.js';
+import { finalSettlement, leaveDayRate, leaveEncashment, leaveEntitlement, leaveSalary, noticePeriod, overtime } from '../src/lib/pay.js';
+import { CALCS } from '../src/calculators.js';
+import { coerce, defaults } from '../src/render.js';
 
 const near = (actual, expected, tolerance = 0.01) =>
   assert.ok(Math.abs(actual - expected) <= tolerance, `expected ${expected}, got ${actual}`);
@@ -85,6 +87,42 @@ describe('pay, leave and notice', () => {
   it('leave salary includes housing, encashment does not', () => {
     near(leaveSalary({ basic: 6000, housing: 3000, days: 30, mode: 'leave' }).total, 9000);
     near(leaveSalary({ basic: 6000, housing: 3000, days: 10, mode: 'encash' }).total, 2000);
+  });
+  it('leave day rate depends on how the company counts leave', () => {
+    near(leaveDayRate(6000, 'calendar'), 200);
+    near(leaveDayRate(6500, 'work5'), 300); // 6,500 × 12 ÷ 260
+    near(leaveDayRate(6240, 'work6'), 240); // 6,240 × 12 ÷ 312
+    near(leaveDayRate(6000, 'unknown'), 200); // falls back to the law's ÷ 30
+  });
+  it('unused leave payout uses basic only', () => {
+    near(leaveEncashment({ basic: 8000, days: 10 }).total, 8000 / 30 * 10);
+    near(leaveEncashment({ basic: 6500, days: 10, basis: 'work5' }).total, 3000);
+    assert.equal(leaveEncashment({ basic: 8000, days: -3 }).total, 0);
+  });
+  it('leave salary can use working days', () => {
+    near(leaveSalary({ basic: 4500, housing: 2000, days: 10, mode: 'leave', basis: 'work5' }).total, 3000);
+  });
+  it('final settlement passes the leave basis through', () => {
+    const r = finalSettlement({
+      basic: 6500,
+      monthly: 9000,
+      start: parseDate('2021-01-01'),
+      end: parseDate('2023-12-31'),
+      unusedLeaveDays: 10,
+      leaveBasis: 'work5',
+    });
+    near(r.leave, 3000);
+  });
+  it('gratuity calculator: unused leave is optional and added on top', () => {
+    const spec = CALCS['uae-gratuity'];
+    const base = { ...defaults(spec), basic: '9000', start: '2021-01-01', end: '2023-12-31' };
+    const without = spec.compute(coerce(spec, base));
+    near(without.big.money, 18900);
+    assert.equal(without.rows.some((r) => r.strong), false, 'no leave rows when days are 0');
+    const withLeave = spec.compute(coerce(spec, { ...base, unusedLeave: '10' }));
+    near(withLeave.big.money, 18900 + 3000);
+    const counted = spec.compute(coerce(spec, { ...base, unusedLeave: '10', leaveBasis: 'work5' }));
+    near(counted.big.money, 18900 + (9000 * 12) / 260 * 10);
   });
   it('overtime rates', () => {
     const r = overtime({ basic: 6000, normal: 10, night: 4 });

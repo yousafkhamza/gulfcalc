@@ -27,6 +27,7 @@ export const PAGES = [
       L('Part years count in proportion', 'تُحتسب أجزاء السنة بنسبتها'),
       L('Unpaid leave is not counted', 'لا تُحتسب الإجازة غير المدفوعة'),
       L('Total cannot exceed 2 years\' wage', 'لا يتجاوز الإجمالي أجر سنتين'),
+      L('Optional: add unused leave days, paid on basic', 'اختياري: أضف أيام الإجازة غير المستخدمة، وتُصرف على الأساسي'),
     ],
     guide: [
       {
@@ -72,6 +73,20 @@ export const PAGES = [
       {
         q: L('Are allowances included?', 'هل تدخل البدلات في الحساب؟'),
         a: L('No. Only the last basic salary is used.', 'لا. يُستخدم آخر راتب أساسي فقط.'),
+      },
+      {
+        q: L('I got a raise during my service. Which salary is used?', 'حصلت على زيادة أثناء خدمتي. أي راتب يُستخدم؟'),
+        a: L(
+          'Your last basic salary, for the whole period, including the years before the raise. A raise only counts if it was added to basic pay, not to allowances.',
+          'آخر راتب أساسي، عن كامل المدة بما فيها السنوات قبل الزيادة. ولا تُحتسب الزيادة إلا إذا أُضيفت إلى الراتب الأساسي وليس إلى البدلات.',
+        ),
+      },
+      {
+        q: L('Is unused annual leave paid on top of gratuity?', 'هل تُصرف الإجازة السنوية غير المستخدمة إضافة إلى المكافأة؟'),
+        a: L(
+          'Yes. Unused leave days you are owed are paid separately on your basic salary when you leave. Enter them in the optional field above to see both together. If your contract counts leave in working days (for example 22 or 24 a year), choose that option so each day is valued correctly.',
+          'نعم. تُصرف أيام الإجازة المستحقة غير المستخدمة بشكل منفصل على راتبك الأساسي عند ترك العمل. أدخلها في الحقل الاختياري أعلاه لترى المبلغين معًا. وإذا كان عقدك يحتسب الإجازة بأيام العمل (مثل 22 أو 24 يومًا في السنة)، فاختر ذلك ليُقيَّم كل يوم بشكل صحيح.',
+        ),
       },
       {
         q: L('Can my employer deduct money from gratuity?', 'هل يحق لصاحب العمل الخصم من المكافأة؟'),
@@ -355,6 +370,7 @@ export const PAGES = [
     how: [
       L('On leave: (basic + housing) ÷ 30 × days', 'أثناء الإجازة: (الأساسي + السكن) ÷ 30 × الأيام'),
       L('Unused days at exit: basic ÷ 30 × days', 'الأيام غير المستخدمة عند ترك العمل: الأساسي ÷ 30 × الأيام'),
+      L('Leave in working days: × 12 ÷ 260 (5-day week)', 'الإجازة بأيام العمل: × 12 ÷ 260 (أسبوع من 5 أيام)'),
       L('6 to 12 months of service: 2 days per month', 'من 6 إلى 12 شهرًا: يومان عن كل شهر'),
       L('After 1 year: 30 days a year', 'بعد سنة: 30 يومًا سنويًا'),
     ],
@@ -384,6 +400,13 @@ export const PAGES = [
         a: L(
           'No. Unused leave you are owed must be paid when the contract ends, whatever the length of your service.',
           'لا. يجب دفع بدل الإجازة المستحقة غير المستخدمة عند انتهاء العقد مهما كانت مدة خدمتك.',
+        ),
+      },
+      {
+        q: L('My company gives 24 working days, not 30. How is a day valued?', 'شركتي تمنح 24 يوم عمل وليس 30. كيف يُقيَّم اليوم؟'),
+        a: L(
+          'The law sets 30 calendar days and values a day at salary ÷ 30. If your leave is counted in working days, a day is worth more: salary × 12 ÷ 260 for a 5-day week, or ÷ 312 for a 6-day week. 24 working days usually covers about the same time off as 30 calendar days. Choose how your company counts leave in the form.',
+          'يحدد القانون 30 يومًا تقويميًا ويُقيَّم اليوم بالراتب ÷ 30. أما إذا كانت الإجازة تُحتسب بأيام العمل فقيمة اليوم أعلى: الراتب × 12 ÷ 260 لأسبوع من 5 أيام، أو ÷ 312 لأسبوع من 6 أيام. و24 يوم عمل تعادل عادة المدة نفسها تقريبًا التي تغطيها 30 يومًا تقويميًا. اختر طريقة احتساب شركتك للإجازة في النموذج.',
         ),
       },
       {

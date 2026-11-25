@@ -11,12 +11,32 @@ export function leaveEntitlement(serviceMonths) {
 }
 
 /**
+ * How a company counts leave days, as the number of days one month of pay is spread over.
+ * calendar: the law's 30 calendar days a year, pay ÷ 30.
+ * work5 / work6: leave counted in working days (e.g. 22–24 a year), pay × 12 ÷ 260 or ÷ 312.
+ */
+export const LEAVE_BASIS = { calendar: 30, work5: 260 / 12, work6: 312 / 12 };
+
+export function leaveDayRate(monthly, basis = 'calendar') {
+  return monthly / (LEAVE_BASIS[basis] ?? LEAVE_BASIS.calendar);
+}
+
+/** Pay for unused leave days paid out when the job ends: basic wage only (Article 29). */
+export function leaveEncashment({ basic, days, basis = 'calendar' }) {
+  const n = Math.max(0, days || 0);
+  const perDay = leaveDayRate(basic, basis);
+  return { perDay, days: n, total: perDay * n };
+}
+
+/**
  * Leave pay. While on leave the worker is paid basic wage plus housing allowance;
  * unused days paid out at the end of service use the basic wage only.
  */
-export function leaveSalary({ basic, housing = 0, days, mode = 'leave' }) {
-  const perDay = mode === 'encash' ? basic / 30 : (basic + Math.max(0, housing)) / 30;
-  return { perDay, days: Math.max(0, days || 0), total: perDay * Math.max(0, days || 0) };
+export function leaveSalary({ basic, housing = 0, days, mode = 'leave', basis = 'calendar' }) {
+  const monthly = mode === 'encash' ? basic : basic + Math.max(0, housing);
+  const perDay = leaveDayRate(monthly, basis);
+  const n = Math.max(0, days || 0);
+  return { perDay, days: n, total: perDay * n };
 }
 
 /**
@@ -56,10 +76,11 @@ export function finalSettlement({
   other = 0,
   deductions = 0,
   dayBasis = 30,
+  leaveBasis = 'calendar',
 }) {
   const gratuity = uaeGratuity({ basic, start, end, unpaidDays: unpaidLeaveDays, dayBasis });
   if (gratuity.error) return gratuity;
-  const leave = (basic / 30) * Math.max(0, unusedLeaveDays);
+  const leave = leaveEncashment({ basic, days: unusedLeaveDays, basis: leaveBasis }).total;
   const salary = (monthly / 30) * Math.max(0, salaryDays);
   const notice = (monthly / 30) * Math.max(0, noticeDays);
   const extra = Math.max(0, other);

@@ -12,7 +12,7 @@ Every formula on the site, where it lives in the code, and the law it comes from
 | Oman | 1 month of basic per year for non-Omanis | `gccEndOfService('oman')` | Royal Decree 53/2023; Social Protection Law (RD 52/2023) savings fund replacing it for future service |
 | Kuwait | 15/26 of a month per year for 5 years, 1 month after; cap 18 months; resignation: 0 under 3 years, ½ for 3–5, ⅔ for 5–10, full at 10+ | `gccEndOfService('kuwait')` | Law 6/2010 Art. 51, 53, 55, 67 |
 | Bahrain | Before 1 Mar 2024: ½ month per year for 3 years, 1 month after (employer pays). From 1 Mar 2024: 4.2% / 8.4% monthly to SIO | `bahrainEndOfService` | Law 36/2012 Art. 116; Edict 109/2023 |
-| UAE leave | 2 days/month after 6 months, 30 days/year after 1 year; leave pay = basic + housing; unused leave at exit = basic | `leaveEntitlement`, `leaveSalary` in `src/lib/pay.js` | Decree-Law 33/2021 Art. 29 |
+| UAE leave | 2 days/month after 6 months, 30 days/year after 1 year; leave pay = basic + housing; unused leave at exit = basic. Day value ÷ 30 (law), or × 12 ÷ 260 / ÷ 312 when the company counts leave in working days | `leaveEntitlement`, `leaveSalary`, `leaveEncashment`, `leaveDayRate` in `src/lib/pay.js` | Decree-Law 33/2021 Art. 29 |
 | UAE overtime | Hourly = basic ÷ 30 ÷ 8; +25%; +50% for 10 pm–4 am, rest days and public holidays | `overtime` | Art. 17–19, 28 |
 | UAE notice | 30–90 days; pay in lieu on full wage | `noticePeriod` | Art. 43 |
 | UAE VAT | 5% | `vat` in `src/lib/money.js` | Decree-Law 8/2017 |
