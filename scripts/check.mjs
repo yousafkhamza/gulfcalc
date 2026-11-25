@@ -45,6 +45,16 @@ function fileFor(pathname) {
   return join(dist, local);
 }
 
+function decodeEntities(text) {
+  if (text === undefined) return undefined;
+  return text
+    .replace(/&#39;/g, "'")
+    .replace(/&quot;/g, '"')
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&');
+}
+
 const idsCache = new Map();
 function idsIn(file) {
   if (!idsCache.has(file)) {
@@ -93,7 +103,8 @@ for (const file of pages) {
   if (h1 !== 1) fail(`${name}: expected 1 <h1>, found ${h1}`);
 
   // Security policy.
-  const csp = html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)?.[1];
+  // The policy is HTML-escaped in the attribute (' becomes &#39;); browsers decode it, so do the same.
+  const csp = decodeEntities(html.match(/<meta http-equiv="Content-Security-Policy" content="([^"]+)">/)?.[1]);
   const adScript = html.includes('pagead2.googlesyndication.com/pagead/js/adsbygoogle.js');
   if (ADS_ENABLED) {
     if (!adScript) fail(`${name}: ads are enabled but the AdSense script is missing`);
@@ -124,7 +135,7 @@ for (const file of pages) {
 
   // Links and anchors.
   for (const m of html.matchAll(/\s(?:href|src)="([^"]+)"/g)) {
-    const raw = m[1].replace(/&amp;/g, '&');
+    const raw = decodeEntities(m[1]);
     if (raw.startsWith('#')) {
       if (raw.length > 1 && !idSet.has(raw.slice(1))) fail(`${name}: anchor ${raw} has no target`);
       continue;
@@ -137,11 +148,9 @@ for (const file of pages) {
       continue;
     }
     if (url.origin !== ORIGIN) continue;
+    // Same domain but outside the site path (e.g. the portfolio at github.io root): not ours to check.
     const target = fileFor(url.pathname);
-    if (!target) {
-      fail(`${name}: link outside the site path ${raw}`);
-      continue;
-    }
+    if (!target) continue;
     if (!existsSync(target)) fail(`${name}: broken link ${raw}`);
     else if (url.hash.length > 1 && target.endsWith('.html') && !idsIn(target).has(url.hash.slice(1))) {
       fail(`${name}: ${raw} points to a missing anchor`);
