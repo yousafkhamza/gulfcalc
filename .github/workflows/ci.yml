@@ -28,7 +28,7 @@ jobs:
       ADSENSE_SLOT_HOME: ${{ vars.ADSENSE_SLOT_HOME }}
       GOOGLE_SITE_VERIFICATION: ${{ vars.GOOGLE_SITE_VERIFICATION }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
 
@@ -84,7 +84,7 @@ jobs:
       ADSENSE_SLOT_SIDEBAR: ${{ matrix.slot }}
       ADSENSE_SLOT_HOME: ${{ matrix.slot }}
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - uses: actions/setup-node@v4
@@ -99,7 +99,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with:
           persist-credentials: false
       - name: actionlint
