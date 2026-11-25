@@ -86,11 +86,16 @@ describe('content', () => {
   });
 
   it('meta descriptions fit in search results', () => {
-    for (const p of PAGES) {
+    const statics = staticPages({ repoUrl: 'https://example.com', checked: { en: '1 Jan 2026', ar: '1 يناير 2026' } });
+    for (const p of [...PAGES, ...statics]) {
       for (const lang of ['en', 'ar']) {
         const len = p.description[lang].length;
-        assert.ok(len >= 50 && len <= 220,`${p.slug} ${lang} description is ${len} characters`);
+        assert.ok(len >= 50 && len <= 220, `${p.slug} ${lang} description is ${len} characters`);
       }
+    }
+    for (const lang of ['en', 'ar']) {
+      assert.ok(UI[lang].home.lede.length >= 50, `home ${lang} description is too short`);
+      assert.ok(UI[lang].notFound.body.length >= 30, `404 ${lang} description is too short`);
     }
   });
 });

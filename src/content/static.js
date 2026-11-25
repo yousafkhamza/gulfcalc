@@ -97,7 +97,10 @@ export function staticPages({ repoUrl, checked }) {
       slug: 'terms/',
       key: 'terms',
       title: L('Terms of use', 'شروط الاستخدام'),
-      description: L('The terms for using gulfcalc calculators.', 'شروط استخدام حاسبات gulfcalc.'),
+      description: L(
+        'The terms for using the free gulfcalc salary and end-of-service calculators, and the limits of their estimates.',
+        'شروط استخدام حاسبات gulfcalc المجانية للرواتب ونهاية الخدمة، وحدود المسؤولية عن نتائجها التقديرية.',
+      ),
       sections: [
         {
           h: L('Estimates only', 'نتائج تقديرية فقط'),
@@ -132,7 +135,10 @@ export function staticPages({ repoUrl, checked }) {
       slug: 'contact/',
       key: 'contact',
       title: L('Contact', 'تواصل معنا'),
-      description: L('Report a problem or suggest a calculator for gulfcalc.', 'أبلغ عن مشكلة أو اقترح حاسبة لموقع gulfcalc.'),
+      description: L(
+        'Report a problem with a calculator or suggest a new one for gulfcalc.',
+        'أبلغ عن مشكلة في إحدى الحاسبات أو اقترح حاسبة جديدة لموقع gulfcalc.',
+      ),
       sections: [
         {
           h: L('Report a problem or suggest a calculator', 'أبلغ عن مشكلة أو اقترح حاسبة'),

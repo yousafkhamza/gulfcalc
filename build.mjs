@@ -69,7 +69,8 @@ const csp = cfg.ADS_ENABLED
       "object-src 'none'",
       "base-uri 'self'",
       "form-action 'self'",
-      'upgrade-insecure-requests',
+      // Only for https sites: on an http://localhost preview it would rewrite local URLs to https.
+      ...(cfg.SITE_URL.startsWith('https://') ? ['upgrade-insecure-requests'] : []),
     ].join('; ');
 
 const ctx = {

@@ -51,9 +51,65 @@ jobs:
         with:
           path: dist
 
+  # Builds the site the way it will look after the steps in docs/ADSENSE.md (custom domain, ads on,
+  # manual ad slots) and as a local preview, and runs the same checks. Nothing here is deployed.
+  variants:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - name: custom domain with ads
+            site_url: https://example.com
+            ads_enabled: 'true'
+            adsense_client: ca-pub-1234567890123456
+            slot: '1111111111'
+          - name: custom domain before AdSense approval
+            site_url: https://example.com
+            ads_enabled: 'false'
+            adsense_client: ca-pub-1234567890123456
+            slot: ''
+          - name: local preview
+            site_url: http://localhost:8080
+            ads_enabled: ''
+            adsense_client: ''
+            slot: ''
+    name: variant (${{ matrix.name }})
+    env:
+      SITE_URL: ${{ matrix.site_url }}
+      ADS_ENABLED: ${{ matrix.ads_enabled }}
+      ADSENSE_CLIENT: ${{ matrix.adsense_client }}
+      ADSENSE_SLOT_IN_CONTENT: ${{ matrix.slot }}
+      ADSENSE_SLOT_SIDEBAR: ${{ matrix.slot }}
+      ADSENSE_SLOT_HOME: ${{ matrix.slot }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Build site
+        run: npm run build
+      - name: Check pages and links
+        run: npm run check
+
+  lint-workflows:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: actionlint
+        uses: docker://rhysd/actionlint:1.7.7
+        with:
+          args: -color
+
   deploy:
     if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
-    needs: build
+    needs: [build, variants, lint-workflows]
     runs-on: ubuntu-latest
     timeout-minutes: 10
     permissions:
